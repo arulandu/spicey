@@ -13,7 +13,7 @@ use libloading::{Library, library_filename};
 use std::ffi::OsStr;
 
 
-struct NgSpice {
+pub struct NgSpice {
     lib: Library,
 }
 
@@ -51,7 +51,7 @@ unsafe extern "C" fn cbw_bgthread_running(finished: bool, id: c_int, user: *cons
 }
 
 impl NgSpice {
-    fn new(libpath: Option<String>) -> Result<Self, libloading::Error> {
+    pub fn new(libpath: Option<String>) -> Result<Self, libloading::Error> {
         let path = libpath.unwrap_or("./lib/libngspice.dylib".to_string());
 
         unsafe {
@@ -67,10 +67,37 @@ impl NgSpice {
         }
     }
 
-    fn init<T: NgSpiceManager>(&self, manager: Option<T>) -> Result<(), String> {
+    pub fn init<T: NgSpiceManager>(&self, manager: Option<T>) -> Result<(), String> {
         unsafe extern "C" fn cbw_send_char<T:NgSpiceManager>(msg: *const c_char, id: c_int, user: *const c_void) -> c_int{
             unsafe {
                 <T as NgSpiceManager>::send_char(&mut *(user as *mut T), std::ffi::CStr::from_ptr(msg).to_str().unwrap().to_owned(), id);
+            }
+            0
+        }
+
+        unsafe extern fn cbw_send_stat<T:NgSpiceManager>(msg: *const c_char, id: c_int, user: *const c_void) -> c_int {
+            unsafe {
+                <T as NgSpiceManager>::send_stat(&mut *(user as *mut T), std::ffi::CStr::from_ptr(msg).to_str().unwrap().to_owned(), id);
+            }
+            0
+        }
+        unsafe extern fn cbw_controlled_exit<T:NgSpiceManager>(status: c_int, immediate: bool, exit_on_quit: bool, id: c_int, user: *const c_void) -> c_int {
+            unsafe {
+                <T as NgSpiceManager>::controlled_exit(&mut *(user as *mut T), status, immediate, exit_on_quit, id);
+            }
+            0
+        }
+        unsafe extern fn cbw_send_data<T:NgSpiceManager>(pvecvaluesall: *const NgVecValuesAll, count: c_int, id: c_int, user: *const c_void) -> c_int {
+            <T as NgSpiceManager>::send_data(&mut *(user as *mut T), pvecvaluesall, count, id);
+            0
+        }
+        unsafe extern fn cbw_send_init_data<T:NgSpiceManager>(pvecinfoall: *const NgVecInfoAll, id: c_int, user: *const c_void) -> c_int {
+            <T as NgSpiceManager>::send_init_data(&mut *(user as *mut T), pvecinfoall, id);
+            0
+        }
+        unsafe extern fn cbw_bgthread_running<T:NgSpiceManager>(finished: bool, id: c_int, user: *const c_void) -> c_int {
+            unsafe {
+                <T as NgSpiceManager>::bgthread_running(&mut *(user as *mut T), finished, id);
             }
             0
         }
@@ -80,11 +107,11 @@ impl NgSpice {
             match manager {
                 Some(m) => ngSpice_Init(
                     Some(cbw_send_char::<T>), 
-                    Some(cbw_send_stat), 
-                    Some(cbw_controlled_exit), 
-                    Some(cbw_send_data), 
-                    Some(cbw_send_init_data), 
-                    Some(cbw_bgthread_running), 
+                    Some(cbw_send_stat::<T>), 
+                    Some(cbw_controlled_exit::<T>), 
+                    Some(cbw_send_data::<T>), 
+                    Some(cbw_send_init_data::<T>), 
+                    Some(cbw_bgthread_running::<T>), 
                     (&m as *const T) as *const c_void
                 ),
                 None => ngSpice_Init(None, None, None, None, None, None, std::ptr::null()), // clear control structures
@@ -96,7 +123,7 @@ impl NgSpice {
         }
     }
 
-    fn command(&self, s: &str) -> Result<(), String> {
+    pub fn command(&self, s: &str) -> Result<(), String> {
         let ret = unsafe {
             let ngSpice_Command =
                 self.get_symbol::<NgSpice_Command>(b"ngSpice_Command\0");
@@ -124,28 +151,31 @@ impl NgSpice {
     }
 }
 
-trait NgSpiceManager where Self : Sized  {
-    fn send_char(&mut self, msg: String, id: c_int);
+pub trait NgSpiceManager where Self : Sized  {
+    fn send_char(&mut self, msg: String, id: i32);
 
-    fn send_stat(&mut self, msg: String, id: c_int) {}
-    fn controlled_exit(&mut self, status: c_int, is_immediate: bool, exit_on_quit: bool, id: c_int) {}
-    fn send_data(&mut self, pvecvaluesall: *const NgVecValuesAll, count: c_int, id: c_int) {}
-    fn send_init_data(&mut self, pvecinfoall: *const NgVecInfoAll, id: c_int) {}
-    fn bgthread_running(&mut self, finished: bool, id: c_int) {}
+    fn send_stat(&mut self, msg: String, id: i32) {}
+    fn controlled_exit(&mut self, status: i32, is_immediate: bool, exit_on_quit: bool, id: i32) {}
+    fn send_data(&mut self, pvecvaluesall: *const NgVecValuesAll, count: i32, id: i32) {}
+    fn send_init_data(&mut self, pvecinfoall: *const NgVecInfoAll, id: i32) {}
+    fn bgthread_running(&mut self, finished: bool, id: i32) {}
 }
 
-struct Manager;
 
-impl NgSpiceManager for Manager {
-    fn send_char(&mut self, msg: String, id: c_int) {
-        println!("send_char: {} {}", msg, id);
-    }
-}
 
 #[test]
 fn ngspice_test() {
+    struct Manager {
+        message: String,
+    }
+    
+    impl NgSpiceManager for Manager {
+        fn send_char(&mut self, msg: String, id: i32) {
+            self.message = msg;
+        }
+    }
     let ng = NgSpice::new(None).unwrap();
-    let manager = Manager {};
+    let manager = Manager { message: String::from("Hello, world!") };
     ng.init(Some(manager)).unwrap();
     // ng.command("source ./netlists/rcrcac.sp").unwrap();
     ng.command("source ./netlists/vdiv.sp").unwrap();

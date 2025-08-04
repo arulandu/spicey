@@ -5,6 +5,11 @@ mod ast;
 mod parser;
 use parser::parse_file;
 mod ngspice;
+use ngspice::NgSpiceManager;
+
+mod repl;
+use repl::run;
+
 
 fn main() {
     let config = Config::build(env::args()).unwrap_or_else(|_| {
@@ -13,6 +18,8 @@ fn main() {
     });
 
     parse_file(&config.input_file);
+
+    run();
 }
 
 struct Config {
