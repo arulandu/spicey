@@ -1,9 +1,8 @@
 mod structs;
 use structs::{NgVecInfoAll, NgVecValuesAll};
 
-mod callbacks;
-
 use libc::{c_char, c_int, c_void};
+
 #[cfg(unix)]
 use libloading::os::unix::Symbol;
 #[cfg(windows)]
@@ -18,37 +17,16 @@ pub struct NgSpice {
 }
 
 
-type NgSpice_Init = extern fn(
-    Option<unsafe extern fn(*const c_char, c_int, *const c_void) -> c_int>, 
-    Option<unsafe extern fn(*const c_char, c_int, *const c_void) -> c_int>, 
-    Option<unsafe extern fn(c_int, bool, bool, c_int, *const c_void) -> c_int>, 
-    Option<unsafe extern fn(*const NgVecValuesAll, c_int, c_int, *const c_void) -> c_int>, 
-    Option<unsafe extern fn(*const NgVecInfoAll, c_int, *const c_void) -> c_int>, 
-    Option<unsafe extern fn(bool, c_int, *const c_void) -> c_int>, 
+type NgSpice_Init = extern "C" fn(
+    Option<unsafe extern "C" fn(*const c_char, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern "C" fn(*const c_char, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern "C" fn(c_int, bool, bool, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern "C" fn(*const NgVecValuesAll, c_int, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern "C" fn(*const NgVecInfoAll, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern "C" fn(bool, c_int, *const c_void) -> c_int>, 
     *const c_void, 
 ) -> c_int;
 type NgSpice_Command = extern "C" fn(*const c_char) -> c_int;
-
-unsafe extern "C" fn cbw_send_stat(msg: *const c_char, id: c_int, user: *const c_void) -> c_int {
-    println!("cbw_send_stat");
-    0
-}
-unsafe extern "C" fn cbw_controlled_exit(status: c_int, immediate: bool, exit_on_quit: bool, id: c_int, user: *const c_void) -> c_int {
-    println!("cbw_controlled_exit");
-    0
-}
-unsafe extern "C" fn cbw_send_data(pvecvaluesall: *const NgVecValuesAll, count: c_int, id: c_int, user: *const c_void) -> c_int {
-    println!("cbw_send_data");
-    0
-}
-unsafe extern "C" fn cbw_send_init_data(pvecinfoall: *const NgVecInfoAll, id: c_int, user: *const c_void) -> c_int {
-    println!("cbw_send_init_data");
-    0
-}
-unsafe extern "C" fn cbw_bgthread_running(finished: bool, id: c_int, user: *const c_void) -> c_int {
-    println!("cbw_bgthread_running");
-    0
-}
 
 impl NgSpice {
     pub fn new(libpath: Option<String>) -> Result<Self, libloading::Error> {
@@ -75,27 +53,31 @@ impl NgSpice {
             0
         }
 
-        unsafe extern fn cbw_send_stat<T:NgSpiceManager>(msg: *const c_char, id: c_int, user: *const c_void) -> c_int {
+        unsafe extern "C" fn cbw_send_stat<T:NgSpiceManager>(msg: *const c_char, id: c_int, user: *const c_void) -> c_int {
             unsafe {
                 <T as NgSpiceManager>::send_stat(&mut *(user as *mut T), std::ffi::CStr::from_ptr(msg).to_str().unwrap().to_owned(), id);
             }
             0
         }
-        unsafe extern fn cbw_controlled_exit<T:NgSpiceManager>(status: c_int, immediate: bool, exit_on_quit: bool, id: c_int, user: *const c_void) -> c_int {
+        unsafe extern "C" fn cbw_controlled_exit<T:NgSpiceManager>(status: c_int, immediate: bool, exit_on_quit: bool, id: c_int, user: *const c_void) -> c_int {
             unsafe {
                 <T as NgSpiceManager>::controlled_exit(&mut *(user as *mut T), status, immediate, exit_on_quit, id);
             }
             0
         }
-        unsafe extern fn cbw_send_data<T:NgSpiceManager>(pvecvaluesall: *const NgVecValuesAll, count: c_int, id: c_int, user: *const c_void) -> c_int {
-            <T as NgSpiceManager>::send_data(&mut *(user as *mut T), pvecvaluesall, count, id);
+        unsafe extern "C" fn cbw_send_data<T:NgSpiceManager>(pvecvaluesall: *const NgVecValuesAll, count: c_int, id: c_int, user: *const c_void) -> c_int {
+            unsafe {
+                <T as NgSpiceManager>::send_data(&mut *(user as *mut T), pvecvaluesall, count, id);
+            }
             0
         }
-        unsafe extern fn cbw_send_init_data<T:NgSpiceManager>(pvecinfoall: *const NgVecInfoAll, id: c_int, user: *const c_void) -> c_int {
-            <T as NgSpiceManager>::send_init_data(&mut *(user as *mut T), pvecinfoall, id);
+        unsafe extern "C" fn cbw_send_init_data<T:NgSpiceManager>(pvecinfoall: *const NgVecInfoAll, id: c_int, user: *const c_void) -> c_int {
+            unsafe {
+                <T as NgSpiceManager>::send_init_data(&mut *(user as *mut T), pvecinfoall, id);
+            }
             0
         }
-        unsafe extern fn cbw_bgthread_running<T:NgSpiceManager>(finished: bool, id: c_int, user: *const c_void) -> c_int {
+        unsafe extern "C" fn cbw_bgthread_running<T:NgSpiceManager>(finished: bool, id: c_int, user: *const c_void) -> c_int {
             unsafe {
                 <T as NgSpiceManager>::bgthread_running(&mut *(user as *mut T), finished, id);
             }
@@ -153,7 +135,6 @@ impl NgSpice {
 
 pub trait NgSpiceManager where Self : Sized  {
     fn send_char(&mut self, msg: String, id: i32);
-
     fn send_stat(&mut self, msg: String, id: i32) {}
     fn controlled_exit(&mut self, status: i32, is_immediate: bool, exit_on_quit: bool, id: i32) {}
     fn send_data(&mut self, pvecvaluesall: *const NgVecValuesAll, count: i32, id: i32) {}

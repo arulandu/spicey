@@ -9,7 +9,9 @@ MacOS support only for the moment. Clone the repository and use `cargo run` to s
     - [x] Parsing and validation of basic circuit components
     - [x] Netlist generation from DSL
     - [x] Calling NgSpice
-    - [ ] Simulation
+    - [ ] Quitting and controlled exists
+    - [ ] Simulation and data extraction
+    - [ ] Plotting (basic)
 - [ ] Features:
     - [ ] Subcircuit support 
     - [ ] Transient and controlled sources
