@@ -1,11 +1,14 @@
 # Spicey
-Spicey is a Rust DSL for circuits that supports interop with SPICE netlists.
+Spicey is a Rust DSL for circuits that supports interop with SPICE netlists. Ships with a better NgSpice REPL.
+
+## Usage
+MacOS support only for the moment. Clone the repository and use `cargo run` to start a wrapped NgSpice REPL.
 
 ## Roadmap
 - [ ] MVP:
     - [x] Parsing and validation of basic circuit components
     - [x] Netlist generation from DSL
-    - [ ] Calling NgSpice
+    - [x] Calling NgSpice
     - [ ] Simulation
 - [ ] Features:
     - [ ] Subcircuit support 
