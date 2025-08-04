@@ -1,0 +1,155 @@
+mod structs;
+use structs::{NgVecInfoAll, NgVecValuesAll};
+
+mod callbacks;
+
+use libc::{c_char, c_int, c_void};
+#[cfg(unix)]
+use libloading::os::unix::Symbol;
+#[cfg(windows)]
+use libloading::os::windows::Symbol;
+use libloading::{Library, library_filename};
+
+use std::ffi::OsStr;
+
+
+struct NgSpice {
+    lib: Library,
+}
+
+
+type NgSpice_Init = extern fn(
+    Option<unsafe extern fn(*const c_char, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern fn(*const c_char, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern fn(c_int, bool, bool, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern fn(*const NgVecValuesAll, c_int, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern fn(*const NgVecInfoAll, c_int, *const c_void) -> c_int>, 
+    Option<unsafe extern fn(bool, c_int, *const c_void) -> c_int>, 
+    *const c_void, 
+) -> c_int;
+type NgSpice_Command = extern "C" fn(*const c_char) -> c_int;
+
+unsafe extern "C" fn cbw_send_stat(msg: *const c_char, id: c_int, user: *const c_void) -> c_int {
+    println!("cbw_send_stat");
+    0
+}
+unsafe extern "C" fn cbw_controlled_exit(status: c_int, immediate: bool, exit_on_quit: bool, id: c_int, user: *const c_void) -> c_int {
+    println!("cbw_controlled_exit");
+    0
+}
+unsafe extern "C" fn cbw_send_data(pvecvaluesall: *const NgVecValuesAll, count: c_int, id: c_int, user: *const c_void) -> c_int {
+    println!("cbw_send_data");
+    0
+}
+unsafe extern "C" fn cbw_send_init_data(pvecinfoall: *const NgVecInfoAll, id: c_int, user: *const c_void) -> c_int {
+    println!("cbw_send_init_data");
+    0
+}
+unsafe extern "C" fn cbw_bgthread_running(finished: bool, id: c_int, user: *const c_void) -> c_int {
+    println!("cbw_bgthread_running");
+    0
+}
+
+impl NgSpice {
+    fn new(libpath: Option<String>) -> Result<Self, libloading::Error> {
+        let path = libpath.unwrap_or("./lib/libngspice.dylib".to_string());
+
+        unsafe {
+            let lib = Library::new(OsStr::new(&path))?;
+            Ok(Self { lib })
+        }
+    }
+
+    unsafe fn get_symbol<T>(&self, name: &[u8]) -> Symbol<T> {
+        unsafe {
+            let symbol = self.lib.get(name).unwrap();
+            libloading::Symbol::<T>::into_raw(symbol)
+        }
+    }
+
+    fn init<T: NgSpiceManager>(&self, manager: Option<T>) -> Result<(), String> {
+        unsafe extern "C" fn cbw_send_char<T:NgSpiceManager>(msg: *const c_char, id: c_int, user: *const c_void) -> c_int{
+            unsafe {
+                <T as NgSpiceManager>::send_char(&mut *(user as *mut T), std::ffi::CStr::from_ptr(msg).to_str().unwrap().to_owned(), id);
+            }
+            0
+        }
+        
+        let ret = unsafe {
+            let ngSpice_Init = self.get_symbol::<NgSpice_Init>(b"ngSpice_Init\0");
+            match manager {
+                Some(m) => ngSpice_Init(
+                    Some(cbw_send_char::<T>), 
+                    Some(cbw_send_stat), 
+                    Some(cbw_controlled_exit), 
+                    Some(cbw_send_data), 
+                    Some(cbw_send_init_data), 
+                    Some(cbw_bgthread_running), 
+                    (&m as *const T) as *const c_void
+                ),
+                None => ngSpice_Init(None, None, None, None, None, None, std::ptr::null()), // clear control structures
+            }
+        };
+        match ret {
+            0 => Ok(()),
+            _ => Err(format!("Init failed: {}", ret)),
+        }
+    }
+
+    fn command(&self, s: &str) -> Result<(), String> {
+        let ret = unsafe {
+            let ngSpice_Command =
+                self.get_symbol::<NgSpice_Command>(b"ngSpice_Command\0");
+            if s.find("bg_") == Some(0) {
+                eprintln!(
+                    "Warning: Background commands are not supported. Use Rust threads instead."
+                );
+                0;
+            }
+
+            let s2 = std::ffi::CString::new(s).unwrap();
+            let ps2: *const c_char = if s.is_empty() {
+                std::ptr::null() // release control structures
+            } else {
+                s2.as_ptr()
+            };
+
+            ngSpice_Command(ps2) 
+        };
+
+        match ret{
+            0 => Ok(()),
+            _ => Err(format!("Command failed: {}", s)),
+        }
+    }
+}
+
+trait NgSpiceManager where Self : Sized  {
+    fn send_char(&mut self, msg: String, id: c_int);
+
+    fn send_stat(&mut self, msg: String, id: c_int) {}
+    fn controlled_exit(&mut self, status: c_int, is_immediate: bool, exit_on_quit: bool, id: c_int) {}
+    fn send_data(&mut self, pvecvaluesall: *const NgVecValuesAll, count: c_int, id: c_int) {}
+    fn send_init_data(&mut self, pvecinfoall: *const NgVecInfoAll, id: c_int) {}
+    fn bgthread_running(&mut self, finished: bool, id: c_int) {}
+}
+
+struct Manager;
+
+impl NgSpiceManager for Manager {
+    fn send_char(&mut self, msg: String, id: c_int) {
+        println!("send_char: {} {}", msg, id);
+    }
+}
+
+#[test]
+fn ngspice_test() {
+    let ng = NgSpice::new(None).unwrap();
+    let manager = Manager {};
+    ng.init(Some(manager)).unwrap();
+    // ng.command("source ./netlists/rcrcac.sp").unwrap();
+    ng.command("source ./netlists/vdiv.sp").unwrap();
+    ng.command("op").unwrap();
+    ng.command("print out").unwrap();
+    println!("Library: {:?}", ng.lib);
+}

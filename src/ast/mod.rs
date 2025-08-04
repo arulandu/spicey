@@ -126,13 +126,7 @@ impl Parse for Ast {
 pub fn parse_title(s: &str) -> IResult<&str, &str> {
     let d = "_- ";
     let tp = take_while1(move |c: char| c.is_alphanumeric() || d.contains(c));
-    let (r, (_, _, _, name)) = (
-        opt(tag(".")),
-        tag_no_case("title"),
-        space1,
-        tp
-    ).parse(s)?;
-    Ok((r, name))
+    delimited(multispace0, tp, multispace0).parse(s)
 }
 
 pub fn parse_end(s: &str) -> IResult<&str, ()> {
@@ -142,7 +136,7 @@ pub fn parse_end(s: &str) -> IResult<&str, ()> {
 
 impl Netlist for Ast {
     fn netlist(&self) -> String {
-        let mut s = format!(".TITLE {}\n", self.title);
+        let mut s = format!("{}\n", self.title);
         for node in &self.nodes {
             s += &node.netlist();
             s += "\n";

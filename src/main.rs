@@ -4,6 +4,7 @@ use std::process;
 mod ast;
 mod parser;
 use parser::parse_file;
+mod ngspice;
 
 fn main() {
     let config = Config::build(env::args()).unwrap_or_else(|_| {

@@ -16,4 +16,4 @@ Spicey is a Rust DSL for circuits that supports interop with SPICE netlists.
 - https://github.com/ftorres16/ftspice
 - https://github.com/Harnesser/tiny-spice-rs
 - https://github.com/ua-kxie/paprika
-
+- https://ashwith.github.io/ngspicepy/_modules/ngspicepy/ngspicepy.html
