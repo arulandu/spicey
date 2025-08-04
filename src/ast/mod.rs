@@ -126,7 +126,11 @@ impl Parse for Ast {
 pub fn parse_title(s: &str) -> IResult<&str, &str> {
     let d = "_- ";
     let tp = take_while1(move |c: char| c.is_alphanumeric() || d.contains(c));
-    delimited(multispace0, tp, multispace0).parse(s)
+    delimited(
+        (multispace0, opt((opt(tag(".")),tag_no_case("title")))),
+        tp, 
+        multispace0
+    ).parse(s)
 }
 
 pub fn parse_end(s: &str) -> IResult<&str, ()> {

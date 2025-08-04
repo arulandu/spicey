@@ -17,9 +17,7 @@ fn main() {
         process::exit(1);
     });
 
-    parse_file(&config.input_file);
-
-    run();
+    run(&config);
 }
 
 struct Config {
@@ -28,7 +26,9 @@ struct Config {
 
 impl Config {
     pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next();
         if let Some(input_file) = args.next() {
+            println!("{}", input_file);
             Ok(Config { input_file })
         } else {
             Err("No input file provided")

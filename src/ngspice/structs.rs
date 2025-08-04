@@ -1,13 +1,20 @@
+use std::convert::From;
 use std::ffi::{c_char, c_double, c_int, c_short, c_void};
 
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct NgComplex {
-    cx_real: c_double,
-    cx_imag: c_double
+    pub cx_real: c_double,
+    pub cx_imag: c_double
 }
 
 pub use num_complex::Complex64;
+impl From<NgComplex> for Complex64 {
+    fn from(ng: NgComplex) -> Self {
+        unsafe { std::mem::transmute(ng) }
+    }
+}
+
 
 #[derive(Clone, Debug)]
 #[repr(C)]
@@ -83,13 +90,58 @@ pub struct NgVecValues {
     is_complex: bool
 }
 
+pub struct VecValues {
+    pub name: String,
+    pub creal: f64,
+    pub cimag: f64,
+    pub is_scale: bool,
+    pub is_complex: bool
+}
+
+impl VecValues {
+    pub unsafe fn from(ng: &NgVecValues) -> VecValues {
+        VecValues {
+            name: std::ffi::CStr::from_ptr(ng.name).to_str().unwrap().to_string(),
+            creal: ng.creal,
+            cimag: ng.cimag,
+            is_scale: ng.is_scale,
+            is_complex: ng.is_complex
+        }
+    }
+}
+
+
 
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct NgVecValuesAll {
-    veccount: c_int,
-    vecindex: c_int,
-    vecsa: *const *const NgVecValues
+    pub veccount: c_int,
+    pub vecindex: c_int,
+    pub vecsa: *const *const NgVecValues
+}
+
+pub struct VecValuesAll {
+    pub count: i32,
+    pub index: i32,
+    pub vecsa: Vec<VecValues>
+}
+
+impl VecValuesAll {
+    pub unsafe fn from(ng: &NgVecValuesAll) -> VecValuesAll {
+        unsafe {
+            let slice = std::slice::from_raw_parts(ng.vecsa, ng.veccount as usize);
+            let mut vals = Vec::<VecValues>::with_capacity(ng.veccount as usize);
+            slice.iter().for_each(|x| {
+                vals.push(VecValues::from(&**x));
+            });
+
+            VecValuesAll {
+                count: ng.veccount,
+                index: ng.vecindex,
+                vecsa: vals
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -98,8 +150,24 @@ pub struct NgVecInfo {
     number: c_int,
     vecname: *const c_char,
     is_real: bool,
-    pdvec: *const c_void,
+    pdvec: *const c_void, // TODO: what is dvec *d and dvec *ds
     pdvecscale: *const c_void
+}
+
+pub struct VecInfo {
+    pub number: i32,
+    pub name: String,
+    pub is_real: bool,
+}
+
+impl VecInfo {
+    pub unsafe fn from(ng: &NgVecInfo) -> VecInfo {
+        VecInfo {
+            number: ng.number,
+            name: std::ffi::CStr::from_ptr(ng.vecname).to_str().unwrap().to_string(),
+            is_real: ng.is_real
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +179,27 @@ pub struct NgVecInfoAll {
     type_: *const c_char,
     veccount: c_int,
     vecs: *const *const NgVecInfo
+}
+pub struct VecInfoAll {
+    pub name: String,
+    pub title: String,
+    pub date: String,
+    pub type_: String,
+    pub count: i32,
+    pub vecs: Vec<VecInfo>
+}
+
+impl VecInfoAll {
+    pub unsafe fn from(ng: &NgVecInfoAll) -> VecInfoAll {
+        VecInfoAll {
+            name: std::ffi::CStr::from_ptr(ng.name).to_str().unwrap().to_string(),
+            title: std::ffi::CStr::from_ptr(ng.title).to_str().unwrap().to_string(),
+            date: std::ffi::CStr::from_ptr(ng.date).to_str().unwrap().to_string(),
+            type_: std::ffi::CStr::from_ptr(ng.type_).to_str().unwrap().to_string(),
+            count: ng.veccount,
+            vecs: std::slice::from_raw_parts(ng.vecs, ng.veccount as usize).iter().map(|x| VecInfo::from(&**x)).collect()
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

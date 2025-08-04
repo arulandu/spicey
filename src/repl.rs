@@ -1,8 +1,10 @@
 use libc::c_int;
 use std::io::Write;
 use colored::Colorize;
-use super::ngspice::{NgSpice, NgSpiceManager};
 
+use super::parser::parse_file;
+use super::ngspice::{NgSpice, NgSpiceManager, VecInfoAll, VecValuesAll};
+use super::Config;
 
 struct Manager {
 }
@@ -19,14 +21,25 @@ impl NgSpiceManager for Manager {
         };
         println!("{}", m);
     }
+
+    fn send_data(&mut self, vecvaluesall: VecValuesAll, count: i32, id: i32) {
+        println!("send_data {}", vecvaluesall.vecsa.iter().map(|x| x.name.clone()).collect::<Vec<_>>().join(", "));
+    }
+
+    fn send_init_data(&mut self, vecinfoall: VecInfoAll, id: i32) {
+        println!("send_init_data {}", vecinfoall.vecs.iter().map(|x| x.name.clone()).collect::<Vec<_>>().join(", "));
+    }
 }
 
-pub fn run() {
+pub fn run(config: &Config) {
     println!("{}", "Spicey v0.0.1: NgSpice REPL".bold().green());
 
     let ng = NgSpice::new(None).unwrap();
     let manager = Manager { };
     ng.init(Some(manager)).unwrap();
+
+    let ast = parse_file(&config.input_file).unwrap();
+    ng.load(&ast).unwrap();
 
     let mut buffer = String::new();
     loop {
